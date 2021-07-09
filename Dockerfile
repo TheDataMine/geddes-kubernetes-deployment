@@ -2,7 +2,7 @@
 FROM python:3
 
 #Set the working directory
-WORKDIR /usr/src/app
+WORKDIR /workspace
 
 #copy all the files
 COPY . .
@@ -15,4 +15,4 @@ RUN pip3 install flask
 EXPOSE 5000
 
 #Run the command
-CMD ["python3", "./src/app.py"]
+CMD ["python3", "app.py"]

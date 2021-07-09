@@ -4,6 +4,11 @@ from flask import Flask, jsonify, request
 import sys
 import random
 
+#Handle Internal Packages
+package_path = "./src/"
+if package_path not in sys.path:
+    sys.path.append(package_path)
+
 #Internal Package(s)
 from utils import fun
 

@@ -75,11 +75,10 @@ _Application-specific Steps_
 4. Locally develop and test Docker image
 5. Create a project or namespace on `geddes-registry`, or find an existing one to contribute to
 6. Tag and push local Docker image to `geddes-registry` project or namespace
-7. Create robot account on `geddes-registry`, if necessary
-8. Create a project or namespace on Rancher, or find an existing one to contribute to
-9. Add your registry to a project or namespace on Rancher
-10. Add robot account to Rancher
-11. Use registry in a deployment on Rancher
+7. Create a project or namespace on Rancher, or find an existing one to contribute to
+8. Add your registry to a project or namespace on Rancher
+9. Add robot account to Rancher
+10. Use registry in a deployment on Rancher
 
 ## Install Necessary Software on your Computer
 
@@ -109,3 +108,144 @@ Click on the `geddes` cluster:
 Find the "Kubeconfig File" button in the upper right, which will pull up this pop-up window:
 ![Rancher](./images/popup.png)
 
+Copy this configuration to your clipboard and head to a terminal on your local machine. Likely, Kubernetes's home directory (`~/.kube/`) will not exist, if you just installed Kubernetes for the first time. If this is the case, in your terminal, run the following to create the directory and the config:
+
+```bash
+mkdir ~/.kube
+cd ~/.kube
+vim config
+```
+
+When inside `config`, paste what's in your clipboard and save and quit (`:wq`).
+
+This will ensure your local machine is configured for Geddes.
+
+# Locally Develop and Test Docker Image
+But first, some context...
+
+In this repository, there is a Dockerfile (`Dockerfile`), as well as Python code (`app.py` is a Flask application, with a REST API, as well as `.src/fun.py`, which is the function referenced by the Flask application's endpoint `add_two`). The function takes an number as input and returns the sum of 2 and the input number (e.g., `5` returns `7`, `12` returns `14`, etc.).
+
+Thus, the goal of our Flask app and our K8s container is, when you send an HTTP request to `add_two`, your response is the sum of 2 and your input. We want this deployed within Purdue's HPC infrastructure, callable when connected to our VPN. You can see how this works in `Demo.ipynb`; it shows the HTTP request to our deployed instance and the response.
+
+Now that we have the context, let's break down [this Dockerfile](https://github.com/TheDataMine/geddes-kubernetes-deployment/blob/main/Dockerfile):
+
+```
+#Create a ubuntu base image with python 3 installed.
+FROM python:3
+
+#Set the working directory
+WORKDIR /workspace
+
+#copy all the files
+COPY . .
+
+#Install the dependencies
+RUN apt-get -y update
+RUN pip3 install flask
+
+#Expose the required port
+EXPOSE 5000
+
+#Run the command
+CMD ["python3", "app.py"]
+```
+
+I start off by establishing a base Python 3 image and then setting the working directory, to which I will copy all files from the directory on my local machine with the Dockerfile (i.e., the GitHub repository contents are copied into `/workspace`). Then, I install all dependencies, including updating packages and installing `flask` for our application. Next, I expose port `5000`, which will host the application. Finally, I execute the command to deploy and run the flask application, which is called `app.py`, at the top of the GitHub repository structure.
+
+Once you have created this Dockerfile, it is time to build and test it. This is done via terminal:
+```bash
+cd /path/to/your/dockerfile
+docker build -t <my-name>/<image-name>:<tag> .
+```
+
+For example, for this Dockerfile, on my MacBook, I ran:
+```bash
+cd /Users/gould29/OneDrive\ -\ purdue.edu/GitHub/geddes-kubernetes-deployment
+docker build -t gould29/k8s-demo:latest .
+```
+
+To see your images, run `docker images`. When I do this, I see:
+![Docker](./images/docker_images.png)
+
+Now, it is time to test the Docker image before tagging and pushing to the Harbor Registry. I complete testing by running the following:
+```bash
+docker run -d -p 5000:5000 gould29/k8s-demo:latest
+```
+
+This test will launch the flask application and expose it on port 5000. Upon running this, I can use `docker ps` to my currently-running containers, which shows me:
+![running](./images/docker_ps.png)
+
+I then go to my browser and navigate to http://localhost:5000/. This shows:
+![app](./images/localhost.png)
+
+Great! Our app is running. Now, let's make sure our `add_two` endpoint is working, too. To test this, I use `Demo.ipynb` to execute an HTTP request. See below:
+![jupyter](./images/notebook.png)
+
+Awesome! Our `add_two` endpoint works as expected. We are now ready to start the process of tagging and pushing this image to the Harbor Registry.
+
+# Create a Project or Namespace on `geddes-registry`
+
+Visit the Harbor Registry: https://geddes-registry.rcac.purdue.edu/harbor/sign-in?redirect_url=%2Fharbor%2Fprojects.
+
+When you sign in, you will see:
+![HarborHome](./images/harbor_home.png)
+
+Either find an existing project to which you'd like to contribute or create your own. To create your own:
+
+1. From the main page click "new project" this will act as your registry
+2. Fill in a name and select whether you want the project to be public/private
+
+![newproject](./images/new_project.png)
+
+Now, click on the new project you created and navigate to "Robot Accounts." Here, you will create a new robot account:
+![robot](./images/robot.png)
+
+Fill out the form:
+- Name your robot account
+- Select account expiration if any, select never to make permenant
+- Customize what permissions you wish the account to have, here I specify the account is only allowed to pull images
+- Click ADD
+
+![robotform](./images/robotform.png)
+
+Copy your information:
+- Your robot’s account name will be something longer than what you specified, since this is a multi-tenant registry, harbor does this to avoid unrelated project owners creating a similarly named robot account
+- Export your token as a JSON or copy it to a clipboard
+
+**NOTE: Harbor does not store account tokens,  once you exit this page your token will be unrecoverable**
+
+![robotdone](./images/robotdone.png)
+
+# Tag and Push local Docker Image to `geddes-registry` Project or Namespace
+
+Now that you have identified where on the Harbor Registry to push your Docker image, it is time to tag and push. This is done using thw following steps.
+
+Tag:
+```bash
+docker tag my-image:tag geddes-registry.rcac.purdue.edu/lab-registry/my-image:tag
+```
+
+Log in to Harbor Registry
+```bash
+docker login geddes-registry.rcac.purdue.edu
+```
+
+Push image
+```bash
+docker push geddes-registry.rcac.purdue.edu/lab-registry/my-image:tag 
+```
+
+So, in the example of the Docker image I have for this repository:
+```bash
+docker tag gould29/k8s-demo:latest geddes-registry.rcac.purdue.edu/gould29/gould29/k8s-demo:latest
+docker login geddes-registry.rcac.purdue.edu
+docker push geddes-registry.rcac.purdue.edu/gould29/gould29/k8s-demo:latest
+```
+
+You will then see progress of your imaging pushing to the registry:
+![progress](./images/pushprogress.png)
+
+When it's done, you will receive a confirmation in your terminal, and you can see it in your project on the Harbor Registry:
+![registry](./images/registry.png)
+
+# Create a Project or Namespace on Rancher
