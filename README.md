@@ -75,10 +75,10 @@ _Application-specific Steps_
 4. Locally develop and test Docker image
 5. Create a project or namespace on `geddes-registry`, or find an existing one to contribute to
 6. Tag and push local Docker image to `geddes-registry` project or namespace
-7. Create a project or namespace on Rancher, or find an existing one to contribute to
-8. Add your registry to a project or namespace on Rancher
-9. Add robot account to Rancher
-10. Use registry in a deployment on Rancher
+7. Create a project or namespace on Rancher, or find an existing one to contribute to, and deploy application
+    - Add your registry to a project or namespace on Rancher
+    - Add robot account to Rancher
+    - Use registry in a deployment on Rancher
 
 ## Install Necessary Software on your Computer
 
@@ -249,3 +249,108 @@ When it's done, you will receive a confirmation in your terminal, and you can se
 ![registry](./images/registry.png)
 
 # Create a Project or Namespace on Rancher
+
+Navigate to Rancher: https://beta.geddes.rcac.purdue.edu/g/clusters
+
+Then, click on the cluster you'd like to access. In our case, it is the `geddes` cluster, and the `datamine` project:
+![project](./images/geddes_project.png)
+
+Click on "Namespaces" and "Add Namespace" **if there is not a namespace already created for your project**:
+![addnamespace](./images/addnamespace.png)
+
+Fill out the name and memory requirements before hitting "Create" at the bottom of the page:
+![namespaceform](./images/namespaceform.png)
+
+Once you've created a namespace, or found an existing one you'd like to use, you can close out of the namespace screen, and navigate to "Secrets" under "Resources." Rancher needs to know where the registry lives and how to authenticate to that registry in order to pull images. Here we add our robot accounts registry credentials to our project in order for this to work. 
+![secrets](./images/secrets1.png)
+
+Click on "Registry Credentials"
+![secrets](./images/secrets2.png)
+
+Fill in all fields:
+- Give a name to the Registry secret (this is an arbitrary name)
+- Select whether or not it’s available to all or a single namespace 
+- Select address as “custom” and provide “geddes-registry.rcac.purdue.edu”
+- Enter your robot accounts long name as the Username
+- Enter your robot accounts token as the Password
+- Click “Save”
+
+![secrets](./images/secrets3.png)
+
+# Deploy your Application
+
+Now that Rancher has our credentials it can pull any image we are authorized to pull. From the "workloads" section of your project click “deploy” at the top right:
+
+![deploymenu](./images/deploy_menu.png)
+
+In the “docker image” box specify your image. You will provide the same name you created when tagging the image.
+
+So since I tagged my image as “geddes-registry.rcac.purdue.edu/lab-registry/my-image:tag”
+We use that here to pull our image
+
+Configure any additional changes your deployment needs from here and click “launch”:
+
+![deploy](./images/deployapp.png)
+
+When the application is running, you should be able to see the following status update on the "workloads" page of Rancher. Note that the dashboard shows that our application (`gould29-k8s-demo`) as "active" status:
+
+![deploystatus](./images/deploystatus.png)
+
+# Create an Endpoint for your Application
+
+Once you have deployed your workload, it is time to associate your application with an endpoint within Purdue. This can be accomplished via the "Service Directory" section of the Rancher application:
+
+![sd](./images/sd.png)
+
+You can see that we have a listing for `gould29-k8s-demo`; however, this item does not have a Cluster IP associated with it. In order to obtain this IP, click "Add Record" in the upper right.
+
+Your applications can be exposed outside of the cluster using kubernetes service load-balancers. These services also auto-generate DNS names for your applications to be reachable from in the format <service-name>.<namespace>.geddes.rcac.purdue.edu
+
+These load-balancer services can expose your applications on two different IP spaces:
+  - Campus Private - Services only reachable via Purdue networks
+  - Public - Services reachable from anywhere via the public internet
+
+Fill out the top form (do not click create when done with this step):
+ - Name your service and select the namespace where your application is deployed.This will act as your new URL mentioned above, so my URL will be “my-name.my-namespace.geddes.rcac.purdue.edu”
+ - Select “one or more workloads” under “Resolves To”
+ - Click on the new “Add Target Workload” box and select your workload 
+ - At the bottom right click “show advanced options”
+ - Under “As a” select “layer-4 Load Balancer” you can leave the new option boxes default 
+
+![dir1](./images/dir1.png)
+
+Click “add Port” under “Port Mapping”
+
+Note: in this example I want all connections hitting my load-balancer IP on port (Published service port) 80 to send those connections to my container port (target port) 80 where apache listens.
+If my web server was listening on port 8888 and I wanted to reach that web service on standard port 80 your “published service port” would be 80 your “target port” would be 5000
+ - Add the port you want to open on the load-balancer side under “Publish The Service Port” 
+ - Under “Target Port” add the container port your service listens on.
+
+![dir2](./images/dir2.png)
+
+Choose to deploy your workload to Campus IP space or Public IP space:
+- Campus IP
+  - From here click “Create” as Campus IP space is the default load-balancer option
+- Public IP
+  - Select the “labels & Annotations” drop down
+  - Click the “Add annotation” button
+  - Add annotation “metallb.universe.tf/address-pool = geddes-public-pool”
+  - Click "Create" when finished
+
+
+Test the newly created service by clicking the “port/tcp” option under our new service 
+resource.
+
+![dir3](./images/dir3.png)
+
+Success!
+
+![yay](./images/yay.png)
+
+Now, to test the endpoint of our `add_two` microservice. For this test, we go back to the Jupyter Notebook:
+
+![jupyterendpoint](./images/jupyterendpoint.png)
+
+# Closing Thoughts
+
+Congratulations! You just deployed your first Flask application via Kubernetes!
