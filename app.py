@@ -5,9 +5,8 @@ import sys
 import random
 
 #Handle Internal Packages
-package_path = "./src/"
-if package_path not in sys.path:
-    sys.path.append(package_path)
+sys.path.append("/workspace/GitHub/geddes-kubernetes-deployment/src/")
+sys.path.append("./src/")
 
 #Internal Package(s)
 from utils import fun
