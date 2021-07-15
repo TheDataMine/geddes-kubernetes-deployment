@@ -351,6 +351,106 @@ Now, to test the endpoint of our `add_two` microservice. For this test, we go ba
 
 ![jupyterendpoint](./images/jupyterendpoint.png)
 
+# Executing Code Outside of Dockerfile
+
+While you can copy code from your local machine to the Docker image, as explained in the example contained within this repository, you will quickly find this is annoying. By referencing static code in your Dockerfile, every time code is updated, you need to re-build, tag, and push your Docker image to Registry.
+
+One way to combat this is by utilizing the persistent storage volume space, **and remove any code copied to your Docker image.** What I do, instead, is use the Docker image to only set up the environment required to run the code I am deploying. For example, to run this repository's `app.py`, I change the Flask app to no longer copy and reference code from my local machine. Now my Dockerfile looks like this:
+
+```bash
+#Create a ubuntu base image with python 3 installed.
+FROM python:3
+
+#Set the working directory
+WORKDIR /workspace
+
+#copy all the files
+# COPY . .                          NO LONGER NEEDED
+
+#Install the dependencies
+RUN apt-get -y update
+RUN pip3 install flask
+
+#Expose the required port
+EXPOSE 5000
+
+#Run the command
+# CMD ["python3", "app.py"]         NO LONGER NEEDED
+```
+
+Note that I removed (commented out) 2 lines, one to copy files from current working directory to `/workspace` and the second to run the Flask application. Here is my rationale for this:
+
+1. Remove `COPY . .`
+    - I will make the code available on my persistent storage volume space, and no longer need to copy from my local machine. To do this, I will enable git on my personal storage volume and `clone` the repository--giving me the ability to edit, push, pull, etc. my code, and my K8s pod will always use the most up-to-date version.
+2. Remove `CMD ["python3", "app.py"]`
+    - I am using this Docker image to **only** set up my environment, not execute code. As you will see in the explanation below, I will reference this command in my `deployment.yaml` (i.e., Workloads page on Rancher). This allows me to recycle my Docker image and share it with peers.
+
+Once you have made your Docker image use case-agnostic, re-build, tag, and push to the Harbor Registry. The example image I have for this is `geddes-registry.rcac.purdue.edu/gould29/gould29/flask_app:trial`.
+
+## Enabling Git on Persistent Storage Volume
+
+In order to do this, you need to have CLI access to a K8s pod referencing your persistent storage volume space. This can be done, for example, by running the following command in your terminal:
+
+```bash
+kubectl exec <CONTAINER> -it bash -n <NAMESPACE>
+```
+
+From there, you can authenticate Git via ssh key and clone your repositories. For a tutorial on how to do this step, please see https://stackoverflow.com/a/2643584.
+
+Once your code is on your persistent storage volume space, it is time to deploy your workload, using the same steps outlined above for the first example. Everything is the same _except_ the actual `Workloads` yaml.
+
+Create a new deployment:
+![deploymenu](./images/deploy_menu.png)
+
+This time, you will do the following:
+  - Reference the correct image from Registry
+  - Under `Volumes`, specify what is in the image below:
+![deploy](./images/deployapp1.png)
+  - Then, select "Show advanced options" in the lower right
+  - Type your `python3` command here, as it was in the Docker image, referencing the proper location of your code. In my case, my `app.py` is located in `/workspace/GitHub/geddes-kubernetes-deployment`, thus, my command is: `/workspace/GitHub/geddes-kubernetes-deployment/app.py`:
+![deploy](./images/command.png)
+
+Hit "launch" and your application should deploy as the first example, where we copied and referenced a static build. Nice!
+
+# Tips
+
+I have an ongoing job on the Geddes K8s cluster which is a Jupyter Lab session, which has access to my persistent storage volume space, `gould29-storage`. So, when I want to develop any code I wish to deploy on the cluster, I do it here, typically under the project's respective GitHub repository. In other words, **I have Git enabled on my persistent storage volume space and interact with code and data via my Jupyter Lab Session**.
+
+![deploy](./images/lab.png)
+
+Then, when I am ready to deploy, I simply create a new "workload" on Rancher and reference the new code in the "Command" advanced option menu. This makes end-to-end work MUCH easier, and I love having instant access to HPC resources, via the JupyterLab session. _Just be sure not to re-create a storage volume every time you wish to use this; only reference an existing one, or your work will be wiped._
+
+For reference, the Docker image I use for my _very_ trivial (and naked (really, there are almost no packages installed beyond base Python...!)) JupyterLab session is: `geddes-registry.rcac.purdue.edu/gould29/gould29/jupyter:latest`. The Dockerfile looks as such:
+
+```bash
+#Create a ubuntu base image with python 3 installed.
+FROM python:3
+
+#Set the working directory
+WORKDIR /workspace
+
+#Install the dependencies
+RUN apt-get -y update
+RUN pip3 install jupyterlab
+
+#Expose the required port
+EXPOSE 8888
+
+#Specify volume
+VOLUME [/workspace]
+
+#Run the command
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root", "--NotebookApp.base_url=/gould29/jupyter", "--port=8888"]
+```
+
+This means when I go to deploy, I head to `dns/gould29/jupyter` in my browser to access. This, again, requires access to VPN or an on-campus machine. A word to the wise, to see the logs/outputs of your K8s pod, run the following command:
+
+```bash
+kubectl logs <CONTAINER> -n <NAMESPACE>
+```
+
+This, for example, will show you the token you need for first-time access to your JupyterLab session.
+
 # Closing Thoughts
 
 Congratulations! You just deployed your first Flask application via Kubernetes!
