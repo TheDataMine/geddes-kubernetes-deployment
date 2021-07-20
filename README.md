@@ -222,7 +222,7 @@ Now that you have identified where on the Harbor Registry to push your Docker im
 
 Tag:
 ```bash
-docker tag my-image:tag geddes-registry.rcac.purdue.edu/lab-registry/my-image:tag
+docker tag my-image:tag geddes-registry.rcac.purdue.edu/my-name/my-image:tag
 ```
 
 Log in to Harbor Registry
@@ -232,7 +232,7 @@ docker login geddes-registry.rcac.purdue.edu
 
 Push image
 ```bash
-docker push geddes-registry.rcac.purdue.edu/lab-registry/my-image:tag 
+docker push geddes-registry.rcac.purdue.edu/my-name/my-image:tag 
 ```
 
 So, in the example of the Docker image I have for this repository:
